@@ -64,7 +64,7 @@ export default function CreateProjectDialog({ open, onClose, onCreated }: Props)
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-          sx={{ mb: 2 }}
+          sx={{ mb: 2, mt: 1 }}
         />
         <TextField
           label="Description (optional)"

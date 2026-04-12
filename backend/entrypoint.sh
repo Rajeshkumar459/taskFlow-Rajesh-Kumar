@@ -1,10 +1,16 @@
 #!/bin/sh
 
-echo "⏳ Waiting for DB..."
-sleep 5
+echo "Waiting for DB..."
 
-echo "🚀 Running migrations..."
+until nc -z postgres "$POSTGRES_PORT"; do
+  echo "DB is unavailable - sleeping"
+  sleep 2
+done
+
+echo "DB is ready!"
+
+echo "Running migrations..."
 /app/scripts/migrate.sh
 
-echo "✅ Starting server..."
+echo "Starting server..."
 exec ./server

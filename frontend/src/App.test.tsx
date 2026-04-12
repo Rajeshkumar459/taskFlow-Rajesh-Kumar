@@ -33,7 +33,8 @@ describe('LoginPage', () => {
 
   it('shows a link to the register page', () => {
     render(<LoginPage />, { wrapper: Wrapper })
-    expect(screen.getByRole('link', { name: /register/i })).toBeInTheDocument()
+    // LoginPage renders "Create one" as the register link
+    expect(screen.getByRole('link', { name: /create one/i })).toBeInTheDocument()
   })
 })
 

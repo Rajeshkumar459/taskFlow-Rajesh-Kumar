@@ -6,7 +6,7 @@ A task management system with authentication, projects, and tasks — built with
 
 ## 1. Overview
 
-TaskFlow lets users register, log in, create projects, add tasks to those projects, and assign tasks to themselves or other users.
+TaskFlow lets users register, log in, create projects, add tasks to those projects, and assign tasks to themselves or other project members. Projects support a member system with admin and member roles.
 
 **Tech Stack:**
 
@@ -19,27 +19,51 @@ TaskFlow lets users register, log in, create projects, add tasks to those projec
 | Container | Docker Compose · multi-stage Dockerfile |
 | Tests | Go stdlib `testing` · Vitest · Testing Library |
 
+**Bonus features implemented:**
+- Kanban board with drag-and-drop ([@dnd-kit](https://dndkit.com/))
+- Real-time task updates via SSE (Server-Sent Events)
+- Dark mode toggle that persists across sessions
+- Project member management with admin/member roles
+
 ---
 
 ## 2. Architecture Decisions
 
-**Go + Gin**: Gin is the most widely adopted Go HTTP framework with excellent middleware support, performance, and a predictable handler signature. The project uses a layered structure: `config` → `db` → `api/handlers` → `router` → `main.go`.
+**Go + Gin**: Gin is the most widely adopted Go HTTP framework with excellent middleware support and a predictable handler signature. The project uses a layered structure: `config` → `db` → `api/handlers` → `router` → `main.go`.
 
-**pgx/v5 directly (no ORM)**: Using pgx with parameterised SQL gives full visibility into queries, avoids N+1 issues, and keeps the schema the source of truth. All SQL is in the `db` package and is intentionally readable.
+**pgx/v5 directly (no ORM)**: Using pgx with parameterised SQL gives full visibility into queries, avoids N+1 issues, and keeps the schema the source of truth. All SQL lives in the `db` package and is intentionally readable.
 
 **JWT in Authorization header**: Tokens are stored in `localStorage` and sent as `Authorization: Bearer <token>`. This is the standard approach for SPAs. The 24h expiry is enforced server-side. The JWT secret is env-only — never committed.
 
-**MUI v7**: Provides a polished, accessible component library out of the box. Combined with a custom theme, it avoids bikeshedding on CSS while producing professional results.
+**MUI v7**: Provides a polished, accessible component library out of the box. Combined with a custom theme it avoids bikeshedding on CSS while producing professional results.
 
-**Optimistic UI for task status**: Clicking the status chip on a task updates the local state immediately (UX feels instant), then calls the API in the background. On failure the previous state is restored.
+**Optimistic UI for task status**: Clicking the status chip updates local state immediately (feels instant), calls the API in the background, and reverts on failure.
 
-**Migration fixup pattern**: The seeded user in migration `0002` had an invalid bcrypt hash (placeholder). Rather than modifying an applied migration, `0005_fix_seed_password` UPDATEs the row with a real cost-12 bcrypt hash. golang-migrate's `schema_migrations` table ensures it only runs once.
+**Drag-and-drop with @dnd-kit**: Tasks can be dragged between Kanban columns to manage status.
+
+**SSE broker for real-time updates**: A per-project SSE endpoint (`GET /projects/:id/events`) broadcasts task mutations to all connected clients in the same project. The broker is a lightweight in-memory fan-out with no external dependency; it is acceptable for a single-instance server. A Redis pub/sub layer would be needed for horizontal scaling.
+
+**Dark mode with ThemeContext**: Theme preference is stored in `localStorage` and respects the OS `prefers-color-scheme` default. The entire MUI theme is regenerated via `useMemo` on mode toggle, keeping theme logic in one place.
+
+**Project members**: Projects have an explicit `project_members` table with a `role` column (`admin` / `member`). The project owner is always an admin. The `/projects/:id/members` endpoint lets admins invite and remove members. Only members see a project in their list, and only admins can delete tasks or change project settings.
+
+**Migration design**: Six numbered migrations keep the schema and seed data cleanly separated:
+
+| # | File | Purpose |
+|---|---|---|
+| 0001 | `init` | `users` table |
+| 0002 | `seed` | Test user with a real bcrypt cost-12 hash |
+| 0003 | `projects_tasks` | `projects` and `tasks` tables with indexes |
+| 0004 | `seed_data` | Demo Project + 3 seeded tasks (todo / in_progress / done) |
+| 0005 | `project_members` | `project_members` join table with `role` column and index |
+| 0006 | `seed_membership` | Backfills existing project owners as admin members |
+
+Every migration has a corresponding `.down.sql`. golang-migrate's `schema_migrations` table ensures each runs exactly once.
 
 **What was intentionally left out:**
-- Pagination (non-critical for the scope; `?page=&limit=` would be straightforward to add)
-- WebSocket real-time updates (would require a broker layer)
-- Refresh tokens (24h expiry is sufficient for the take-home scope)
-- Dedicated user management endpoints (users exist only as assignees)
+- Pagination on list endpoints (`?page=&limit=`) — non-critical for the scope; the query layer is ready for it
+- Refresh token rotation — 24h access tokens are sufficient for a take-home
+- Email notifications for member invitations
 
 ---
 
@@ -48,7 +72,7 @@ TaskFlow lets users register, log in, create projects, add tasks to those projec
 Requires only Docker Desktop.
 
 ```bash
-git clone https://github.com/your-name/taskflow
+git clone https://github.com/Rajeshkumar459/TaskFlow
 cd taskflow
 
 cp .env.example .env
@@ -59,7 +83,17 @@ docker compose up --build
 - **Frontend:** http://localhost:3000
 - **Backend API:** http://localhost:8080
 
-The first build downloads Go modules and npm packages (~2–3 min). Subsequent starts are fast.
+The first build downloads Go modules and npm packages (~5–6 min depending on user device). Subsequent starts are fast.
+
+To run tests:
+
+```bash
+# Backend integration tests (require a running DB)
+docker compose run --rm backend-test
+
+# Frontend unit/component tests
+docker compose run --rm frontend-test
+```
 
 ---
 
@@ -77,11 +111,6 @@ To roll back one step:
 
 ```bash
 docker run --rm \
-  -e DB_HOST=localhost \
-  -e DB_PORT=5432 \
-  -e DB_USER=taskflow \
-  -e DB_PASSWORD=taskflow \
-  -e DB_NAME=taskflow \
   migrate/migrate \
   -path /app/migrations \
   -database "postgres://taskflow:taskflow@localhost:5432/taskflow?sslmode=disable" \
@@ -118,12 +147,13 @@ All endpoints return `Content-Type: application/json`. Protected endpoints requi
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/projects` | List projects user owns or has tasks in |
-| POST | `/projects` | Create project |
-| GET | `/projects/:id` | Project + tasks |
-| PATCH | `/projects/:id` | Update name/description (owner only) |
-| DELETE | `/projects/:id` | Delete project + tasks (owner only) |
-| GET | `/projects/:id/stats` | Task counts by status and assignee |
+| GET | `/projects` | List projects user is a member of or owns |
+| POST | `/projects` | Create project (caller becomes admin) |
+| GET | `/projects/:id` | Project details + tasks |
+| PATCH | `/projects/:id` | Update name/description (admin only) |
+| DELETE | `/projects/:id` | Delete project + tasks (admin only) |
+| GET | `/projects/:id/stats` | Task counts by status and by assignee |
+| GET | `/projects/:id/events` | SSE stream — real-time task mutations |
 
 ### Tasks
 
@@ -131,8 +161,16 @@ All endpoints return `Content-Type: application/json`. Protected endpoints requi
 |---|---|---|
 | GET | `/projects/:id/tasks` | List tasks; supports `?status=` and `?assignee=` |
 | POST | `/projects/:id/tasks` | Create task |
-| PATCH | `/tasks/:id` | Update task fields |
-| DELETE | `/tasks/:id` | Delete task (project owner only) |
+| PATCH | `/tasks/:id` | Update title, description, status, priority, assignee, due_date |
+| DELETE | `/tasks/:id` | Delete task (project admin only) |
+
+### Members
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/projects/:id/members` | List project members |
+| POST | `/projects/:id/members` | Add member by email (admin only) |
+| DELETE | `/projects/:id/members/:userId` | Remove member (admin only) |
 
 **Error format:**
 ```json
@@ -140,40 +178,3 @@ All endpoints return `Content-Type: application/json`. Protected endpoints requi
 ```
 
 ---
-
-## 7. Running Tests
-
-```bash
-# Backend tests (unit — no DB required; integration tests skip if TEST_DATABASE_URL is unset)
-docker compose run --rm backend-test
-
-# Frontend tests
-docker compose run --rm frontend-test
-```
-
----
-
-## 8. What You'd Do With More Time
-
-**Performance:**
-- Pagination on list endpoints (`?page=&limit=`) — the query layer is ready for it
-- Lazy-load the MUI icon bundle and code-split the router to reduce the 555 KB JS bundle
-
-**Features:**
-- Drag-and-drop Kanban board (react-dnd or @dnd-kit)
-- Real-time task updates via WebSocket (gorilla/websocket on the backend)
-- Project member invitations with email notifications
-
-**Reliability:**
-- Integration test suite against a test database (the harness is in `tests/api_test.go`, it skips without `TEST_DATABASE_URL`)
-- Health check with DB ping and `depends_on: condition: service_healthy` in docker-compose
-- Structured error monitoring (Sentry)
-
-**Security:**
-- Refresh token rotation + short-lived access tokens (15 min)
-- Rate limiting on auth endpoints (gin-contrib/ratelimit)
-- CSRF protection for cookie-based auth
-
-**Shortcuts taken:**
-- The `projectMembers` list in `ProjectDetailPage` reconstructs user names from assignee IDs in tasks — a proper `/projects/:id/members` endpoint would return full user objects
-- The `confirm()` dialog for task deletion is a browser native dialog; a proper destructive-action dialog would be better UX

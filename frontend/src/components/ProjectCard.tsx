@@ -46,7 +46,6 @@ export default function ProjectCard({ project, taskCounts }: Props) {
         sx={{ height: '100%', alignItems: 'flex-start' }}
       >
         <CardContent sx={{ pb: taskCounts ? 1.5 : 2 }}>
-          {/* Header */}
           <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1, gap: 1 }}>
             <FolderIcon color="primary" sx={{ mt: 0.25, flexShrink: 0 }} />
             <Typography variant="h6" component="div" fontWeight={600} sx={{ lineHeight: 1.25 }}>
@@ -54,7 +53,6 @@ export default function ProjectCard({ project, taskCounts }: Props) {
             </Typography>
           </Box>
 
-          {/* Description */}
           {project.description ? (
             <Typography
               variant="body2"
@@ -73,10 +71,8 @@ export default function ProjectCard({ project, taskCounts }: Props) {
             <Box sx={{ mb: 1.5 }} />
           )}
 
-          {/* Task breakdown (shown when stats are available) */}
           {taskCounts && (
             <Box sx={{ mb: 1 }}>
-              {/* Progress bar */}
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                 <Typography variant="caption" color="text.secondary">
                   {taskCounts.total === 0 ? 'No tasks yet' : `${taskCounts.done} / ${taskCounts.total} done`}
@@ -97,13 +93,12 @@ export default function ProjectCard({ project, taskCounts }: Props) {
                     bgcolor: 'action.hover',
                     mb: 1,
                     '& .MuiLinearProgress-bar': {
-                      bgcolor: pct === 100 ? '#10b981' : 'primary.main',
+                      bgcolor: pct === 100 ? 'success.main' : 'primary.main',
                     },
                   }}
                 />
               )}
 
-              {/* Status dots */}
               {taskCounts.total > 0 && (
                 <Box sx={{ display: 'flex', gap: 1.5 }}>
                   {STATUS_DOT.map(({ key, color, label }) => (
@@ -124,7 +119,6 @@ export default function ProjectCard({ project, taskCounts }: Props) {
             </Box>
           )}
 
-          {/* Created date + overdue badge */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
             <Typography variant="caption" color="text.disabled">
               Created {new Date(project.created_at).toLocaleDateString(undefined, {

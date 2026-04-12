@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
@@ -24,8 +24,6 @@ import type { Project, TaskCounts } from '../types'
 import ProjectCard from '../components/ProjectCard'
 import CreateProjectDialog from '../components/CreateProjectDialog'
 
-// ─── Greeting ────────────────────────────────────────────────────────────────
-
 function greeting(name: string): string {
   const h = new Date().getHours()
   const salutation =
@@ -36,11 +34,9 @@ function greeting(name: string): string {
   return `${salutation}, ${name.split(' ')[0]}`
 }
 
-// ─── Stat card ───────────────────────────────────────────────────────────────
-
 interface StatCardProps {
   label: string
-  value: number | null   // null = loading
+  value: number | null
   icon: React.ReactNode
   accentColor: string
 }
@@ -108,8 +104,6 @@ const STATS_CONFIG: Omit<StatCardProps, 'value'>[] = [
   { label: 'Overdue',     icon: <WarningAmberIcon />,          accentColor: '#ef4444' },
 ]
 
-// ─── Page ────────────────────────────────────────────────────────────────────
-
 export default function ProjectsPage() {
   const { user } = useAuth()
 
@@ -118,19 +112,20 @@ export default function ProjectsPage() {
   const [error, setError] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  // Per-project task counts, loaded asynchronously after projects
   const [taskCountsMap, setTaskCountsMap] = useState<Record<string, TaskCounts>>({})
   const [statsLoading, setStatsLoading] = useState(false)
 
-  // Aggregate totals
-  const totals = Object.values(taskCountsMap).reduce(
-    (acc, c) => ({
-      todo:        acc.todo + c.todo,
-      in_progress: acc.in_progress + c.in_progress,
-      done:        acc.done + c.done,
-      overdue:     acc.overdue + c.overdue,
-    }),
-    { todo: 0, in_progress: 0, done: 0, overdue: 0 }
+  const totals = useMemo(
+    () => Object.values(taskCountsMap).reduce(
+      (acc, c) => ({
+        todo:        acc.todo + c.todo,
+        in_progress: acc.in_progress + c.in_progress,
+        done:        acc.done + c.done,
+        overdue:     acc.overdue + c.overdue,
+      }),
+      { todo: 0, in_progress: 0, done: 0, overdue: 0 }
+    ),
+    [taskCountsMap]
   )
 
   const loadProjects = useCallback(async () => {
@@ -157,7 +152,6 @@ export default function ProjectsPage() {
       )
       const map: Record<string, TaskCounts> = {}
       results.forEach((result, i) => {
-        // Guard: result.value can be undefined (204) or have null by_status (empty project)
         if (result.status !== 'fulfilled' || result.value == null) return
         const s = result.value
         const counts: TaskCounts = { todo: 0, in_progress: 0, done: 0, total: 0, overdue: 0 }
@@ -182,7 +176,6 @@ export default function ProjectsPage() {
 
   const handleProjectCreated = (project: Project) => {
     setProjects((prev) => [project, ...prev])
-    // New project has no tasks yet
     setTaskCountsMap((prev) => ({
       ...prev,
       [project.id]: { todo: 0, in_progress: 0, done: 0, total: 0, overdue: 0 },
@@ -199,7 +192,6 @@ export default function ProjectsPage() {
 
   return (
     <Box>
-      {/* ── Greeting ───────────────────────────────────────────────────── */}
       {user && (
         <Box sx={{ mb: 4 }}>
           <Typography variant="h4" fontWeight={700}>
@@ -217,16 +209,14 @@ export default function ProjectsPage() {
         </Alert>
       )}
 
-      {/* ── Stat cards ─────────────────────────────────────────────────── */}
       <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mb: 5 }}>
         {STATS_CONFIG.map((cfg, i) => (
-          <Grid key={cfg.label} size={{ xs: 6, sm: 4, lg: true }}>
+          <Grid key={cfg.label} size={{ xs: 6, sm: 4, lg: 'grow' }}>
             <StatCard {...cfg} value={statValues[i]} />
           </Grid>
         ))}
       </Grid>
 
-      {/* ── Projects section ───────────────────────────────────────────── */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
         <Typography variant="h5" fontWeight={600} sx={{ flex: 1 }}>
           Your Projects

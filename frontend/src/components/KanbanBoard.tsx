@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useMemo, useCallback } from 'react'
 import { alpha, useTheme } from '@mui/material/styles'
 import {
   DndContext,
@@ -488,21 +488,16 @@ export default function KanbanBoard({
   onOpenCreateTask,
   onOpenEditTask,
 }: KanbanBoardProps) {
-  const [columnTasks, setColumnTasks] = useState<Record<TaskStatus, Task[]>>(
-    () => distributeByStatus(tasks)
+  const [dragOverride, setDragOverride] = useState<Record<TaskStatus, Task[]> | null>(null)
+  const columnTasks = useMemo(
+    () => dragOverride ?? distributeByStatus(tasks),
+    [dragOverride, tasks]
   )
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   const [overColumn, setOverColumn] = useState<TaskStatus | null>(null)
 
   const dragStartColumnRef = useRef<TaskStatus | null>(null)
   const isDraggingRef = useRef(false)
-
-  // Sync from parent (e.g. SSE events) — only when not dragging
-  useEffect(() => {
-    if (!isDraggingRef.current) {
-      setColumnTasks(distributeByStatus(tasks))
-    }
-  }, [tasks])
 
   const getColumn = useCallback(
     (id: UniqueIdentifier): TaskStatus | null => {
@@ -539,9 +534,10 @@ export default function KanbanBoard({
 
     if (!fromCol || !toCol || fromCol === toCol) return
 
-    setColumnTasks((prev) => {
-      const fromItems = prev[fromCol]
-      const toItems = prev[toCol]
+    setDragOverride((prev) => {
+      const base = prev ?? distributeByStatus(tasks)
+      const fromItems = base[fromCol]
+      const toItems = base[toCol]
       const activeIdx = fromItems.findIndex((t) => t.id === active.id)
       const overIdx = toItems.findIndex((t) => t.id === over.id)
 
@@ -549,7 +545,7 @@ export default function KanbanBoard({
       const insertAt = overIdx === -1 ? toItems.length : overIdx
 
       return {
-        ...prev,
+        ...base,
         [fromCol]: fromItems.filter((t) => t.id !== active.id),
         [toCol]: [
           ...toItems.slice(0, insertAt),
@@ -566,8 +562,8 @@ export default function KanbanBoard({
     setOverColumn(null)
 
     if (!over) {
-      // Dropped outside — revert to last known-good state from tasks prop
-      setColumnTasks(distributeByStatus(tasks))
+      // Dropped outside — revert to tasks prop
+      setDragOverride(null)
       dragStartColumnRef.current = null
       return
     }
@@ -576,44 +572,34 @@ export default function KanbanBoard({
     const startCol = dragStartColumnRef.current
     dragStartColumnRef.current = null
 
-    if (!finalCol) return
+    if (!finalCol) { setDragOverride(null); return }
 
     // Within-column reorder
     const overCol = getColumn(over.id)
     if (overCol === finalCol && active.id !== over.id) {
-      setColumnTasks((prev) => {
-        const items = prev[finalCol]
+      setDragOverride((prev) => {
+        const base = prev ?? distributeByStatus(tasks)
+        const items = base[finalCol]
         const aIdx = items.findIndex((t) => t.id === active.id)
         const oIdx = items.findIndex((t) => t.id === over.id)
         if (aIdx === -1 || oIdx === -1) return prev
-        return { ...prev, [finalCol]: arrayMove(items, aIdx, oIdx) }
+        return { ...base, [finalCol]: arrayMove(items, aIdx, oIdx) }
       })
+    } else if (!startCol || startCol === finalCol) {
+      setDragOverride(null)
     }
 
     // Persist status change via API
     if (startCol && startCol !== finalCol) {
       const task = columnTasks[finalCol].find((t) => t.id === active.id)
-      if (!task) return
-
-      const savedStartCol = startCol
-      const savedFinalCol = finalCol
+      if (!task) { setDragOverride(null); return }
 
       updateTask(task.id, { status: finalCol }).then((updated) => {
         onTaskSaved(updated)
+        setDragOverride(null)
       }).catch(() => {
-        // Revert the moved card back to its original column
-        setColumnTasks((prev) => {
-          const taskToRevert = prev[savedFinalCol]?.find((t) => t.id === active.id)
-          if (!taskToRevert) return prev
-          return {
-            ...prev,
-            [savedFinalCol]: prev[savedFinalCol].filter((t) => t.id !== active.id),
-            [savedStartCol]: [
-              ...prev[savedStartCol],
-              { ...taskToRevert, status: savedStartCol },
-            ],
-          }
-        })
+        // Revert: tasks prop still has original state
+        setDragOverride(null)
       })
     }
   }

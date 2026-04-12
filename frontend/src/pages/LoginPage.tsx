@@ -51,7 +51,12 @@ export default function LoginPage() {
       navigate('/projects')
     } catch (err) {
       if (err instanceof ApiError) {
-        err.fields ? setFieldErrors(err.fields) : setError(err.message)
+        if(err.fields){
+          setFieldErrors(err.fields);
+        }
+        else{
+          setError(err.message);
+        }
       } else {
         setError('Login failed. Please try again.')
       }

@@ -71,7 +71,7 @@ export default function TaskDialog({ open, onClose, onSaved, projectId, task, pr
       setError('')
       setFieldErrors({})
     }
-  }, [open, task, projectMembers])
+  }, [open, task, projectMembers, defaultStatus])
 
   const handleClose = () => {
     setError('')

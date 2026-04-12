@@ -47,7 +47,12 @@ export default function RegisterPage() {
       navigate('/projects')
     } catch (err) {
       if (err instanceof ApiError) {
-        err.fields ? setFieldErrors(err.fields) : setError(err.message)
+        if(err.fields){
+          setFieldErrors(err.fields);
+        }
+        else{
+          setError(err.message);
+        }
       } else {
         setError('Registration failed. Please try again.')
       }

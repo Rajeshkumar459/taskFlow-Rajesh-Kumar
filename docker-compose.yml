@@ -7,6 +7,11 @@ services:
       - .env
     ports:
       - "${POSTGRES_PORT}:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", $POSTGRES_USER]
+      interval: 2s
+      timeout: 2s
+      retries: 10
     volumes:
       - pg_data:/var/lib/postgresql/data
 
@@ -14,7 +19,8 @@ services:
     build: ./backend
     container_name: taskflow_backend
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     env_file:
       - .env
     ports:
@@ -22,7 +28,10 @@ services:
     entrypoint: ["/app/entrypoint.sh"]
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
     container_name: taskflow_frontend
     depends_on:
       - backend
@@ -30,7 +39,9 @@ services:
       - "3000:3000"
 
   frontend-test:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: builder
     command: ["npm", "run", "test"]
 
   backend-test:

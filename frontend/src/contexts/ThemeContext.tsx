@@ -15,6 +15,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType>({ mode: 'light', toggleMode: () => {} })
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useThemeMode = () => useContext(ThemeContext)
 
 function buildTheme(mode: ColorMode) {

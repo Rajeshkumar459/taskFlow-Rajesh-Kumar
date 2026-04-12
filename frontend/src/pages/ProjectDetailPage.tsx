@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -72,6 +72,26 @@ function getDueDateStatus(dueDate: string | undefined, status: TaskStatus): 'ove
 
 type ViewMode = 'list' | 'kanban'
 
+function PriorityChip({ priority, sx = {} }: { priority: string; sx?: object }) {
+  const ps = PRIORITY_STYLE[priority] ?? PRIORITY_STYLE.medium
+  return (
+    <Chip
+      label={ps.label}
+      size="small"
+      sx={{
+        height: 20,
+        bgcolor: alpha(ps.color, 0.1),
+        color: ps.color,
+        border: `1px solid ${alpha(ps.color, 0.3)}`,
+        fontWeight: 600,
+        fontSize: '0.7rem',
+        '.MuiChip-label': { px: 1 },
+        ...sx,
+      }}
+    />
+  )
+}
+
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -95,6 +115,8 @@ export default function ProjectDetailPage() {
   const [editProjectOpen, setEditProjectOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteTaskTarget, setDeleteTaskTarget] = useState<Task | null>(null)
+  const [deletingTask, setDeletingTask] = useState(false)
 
   const loadProject = useCallback(async () => {
     if (!id) return
@@ -124,7 +146,6 @@ export default function ProjectDetailPage() {
     onMemberRemoved: (userId) => setMembers((prev) => prev.filter((m) => m.user_id !== userId)),
   })
 
-  // Re-fetch filtered tasks when filters change (list view)
   const applyFilters = useCallback(async () => {
     if (!id) return
     try {
@@ -133,28 +154,36 @@ export default function ProjectDetailPage() {
         assignee: assigneeFilter || undefined,
       })
       setTasks(filtered)
-    } catch { /* retain current */ }
+    } catch { /* retain current task list on transient fetch error */ }
   }, [id, statusFilter, assigneeFilter])
 
   useEffect(() => {
     if (!loading) applyFilters()
-  }, [statusFilter, assigneeFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, applyFilters])
 
   const handleTaskSaved = (saved: Task) => {
     setTasks((ts) => {
       const idx = ts.findIndex((t) => t.id === saved.id)
-      if (idx >= 0) { const c = [...ts]; c[idx] = saved; return c }
+      if (idx >= 0) return ts.map((t) => (t.id === saved.id ? saved : t))
       return [...ts, saved]
     })
   }
 
-  const handleDeleteTask = async (task: Task) => {
-    if (!confirm(`Delete task "${task.title}"?`)) return
+  const handleDeleteTask = (task: Task) => {
+    setDeleteTaskTarget(task)
+  }
+
+  const confirmDeleteTask = async () => {
+    if (!deleteTaskTarget) return
+    setDeletingTask(true)
     try {
-      await deleteTask(task.id)
-      setTasks((ts) => ts.filter((t) => t.id !== task.id))
+      await deleteTask(deleteTaskTarget.id)
+      setTasks((ts) => ts.filter((t) => t.id !== deleteTaskTarget.id))
+      setDeleteTaskTarget(null)
     } catch (err) {
       if (err instanceof ApiError) setError(err.message)
+    } finally {
+      setDeletingTask(false)
     }
   }
 
@@ -164,13 +193,12 @@ export default function ProjectDetailPage() {
   }
 
   const handleStatusChange = async (task: Task, newStatus: TaskStatus) => {
-    const prev = tasks
     setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t)))
     try {
       const updated = await updateTask(task.id, { status: newStatus })
       setTasks((ts) => ts.map((t) => (t.id === updated.id ? updated : t)))
     } catch {
-      setTasks(prev)
+      setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, status: task.status } : t)))
     }
   }
 
@@ -203,13 +231,15 @@ export default function ProjectDetailPage() {
   const myMembership = members.find((m) => m.user_id === currentUser?.id)
   const isAdmin = myMembership?.role === 'admin'
 
-  const userById = new Map<string, string>(allUsers.map((u) => [u.id, u.name]))
+  const userById = useMemo(
+    () => new Map<string, string>(allUsers.map((u) => [u.id, u.name])),
+    [allUsers]
+  )
 
-  const projectMembersAsUsers: User[] = members.map((m) => ({
-    id: m.user_id,
-    name: m.name,
-    email: m.email,
-  }))
+  const projectMembersAsUsers = useMemo<User[]>(
+    () => members.map((m) => ({ id: m.user_id, name: m.name, email: m.email })),
+    [members]
+  )
 
   if (loading) {
     return (
@@ -229,9 +259,7 @@ export default function ProjectDetailPage() {
 
   return (
     <Box>
-      {/* ── Header ─────────────────────────────────────────────────────── */}
       <Box sx={{ mb: 3 }}>
-        {/* Row 1: Back + title + admin icons */}
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 0.5 }}>
           <IconButton onClick={() => navigate('/projects')} size="small" sx={{ mt: 0.4, flexShrink: 0 }}>
             <ArrowBackIcon />
@@ -270,7 +298,7 @@ export default function ProjectDetailPage() {
               {isAdmin && (
                 <Button
                   size="small"
-                  startIcon={<PeopleOutlineIcon sx={{ fontSize: '14px !important' }} />}
+                  startIcon={<PeopleOutlineIcon sx={{ fontSize: 14 }} />}
                   onClick={() => setMemberDialogOpen(true)}
                   sx={{ fontSize: '0.75rem', minWidth: 0, px: 1, py: 0.25 }}
                 >
@@ -281,7 +309,6 @@ export default function ProjectDetailPage() {
           </Box>
         </Box>
 
-        {/* Row 2: View toggle (right-aligned) + Add Task */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: { xs: 0, sm: '44px' }, mt: { xs: 1.5, sm: 1 } }}>
           <Box sx={{ flex: 1 }} />
 
@@ -320,7 +347,6 @@ export default function ProjectDetailPage() {
         </Alert>
       )}
 
-      {/* ── Filters ────────────────────────────────────────────────────── */}
       <Box sx={{ mb: 3 }}>
         <FilterBar
           statusFilter={viewMode === 'kanban' ? '' : statusFilter}
@@ -333,7 +359,6 @@ export default function ProjectDetailPage() {
         />
       </Box>
 
-      {/* ── Content ────────────────────────────────────────────────────── */}
       {viewMode === 'kanban' ? (
         <KanbanBoard
           tasks={sortTasks(tasks)}
@@ -344,9 +369,7 @@ export default function ProjectDetailPage() {
           onOpenCreateTask={openCreateTask}
           onOpenEditTask={openEditTask}
         />
-      ) : (
-        /* List view */
-        tasks.length === 0 ? (
+      ) : tasks.length === 0 ? (
           <Box
             sx={{
               textAlign: 'center',
@@ -386,17 +409,15 @@ export default function ProjectDetailPage() {
                     '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
-                  {/* Status chip — stays left on all sizes */}
                   <Tooltip title="Click to advance status" arrow>
-                    <span style={{ flexShrink: 0, paddingTop: 2 }}>
+                    <Box component="span" sx={{ flexShrink: 0, pt: '2px' }}>
                       <TaskStatusChip
                         status={task.status}
                         onClick={() => handleStatusChange(task, nextStatus(task.status))}
                       />
-                    </span>
+                    </Box>
                   </Tooltip>
 
-                  {/* Main content: title + meta */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       variant="body1"
@@ -419,28 +440,11 @@ export default function ProjectDetailPage() {
                         {task.description}
                       </Typography>
                     )}
-                    {/* Inline meta row — due date + assignee (priority moved to right) */}
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5, alignItems: 'center' }}>
-                      {/* Priority chip — only shown on xs (on sm+ it's in the right column) */}
-                      {(() => {
-                        const ps = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE.medium
-                        return (
-                          <Chip
-                            label={ps.label}
-                            size="small"
-                            sx={{
-                              display: { xs: 'inline-flex', sm: 'none' },
-                              height: 20,
-                              bgcolor: alpha(ps.color, 0.1),
-                              color: ps.color,
-                              border: `1px solid ${alpha(ps.color, 0.3)}`,
-                              fontWeight: 600,
-                              fontSize: '0.68rem',
-                              '.MuiChip-label': { px: 1 },
-                            }}
-                          />
-                        )
-                      })()}
+                      <PriorityChip
+                        priority={task.priority}
+                        sx={{ display: { xs: 'inline-flex', sm: 'none' }, fontSize: '0.68rem' }}
+                      />
                       {task.due_date && (() => {
                         const ds = getDueDateStatus(task.due_date, task.status)
                         const color = ds === 'overdue' ? 'error.main' : ds === 'due-soon' ? 'warning.main' : 'text.disabled'
@@ -460,29 +464,11 @@ export default function ProjectDetailPage() {
                     </Box>
                   </Box>
 
-                  {/* Priority chip — right-aligned, visible on sm+ only */}
-                  {(() => {
-                    const ps = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE.medium
-                    return (
-                      <Chip
-                        label={ps.label}
-                        size="small"
-                        sx={{
-                          display: { xs: 'none', sm: 'inline-flex' },
-                          height: 22,
-                          bgcolor: alpha(ps.color, 0.1),
-                          color: ps.color,
-                          border: `1px solid ${alpha(ps.color, 0.3)}`,
-                          fontWeight: 600,
-                          fontSize: '0.7rem',
-                          flexShrink: 0,
-                          '.MuiChip-label': { px: 1 },
-                        }}
-                      />
-                    )
-                  })()}
+                  <PriorityChip
+                    priority={task.priority}
+                    sx={{ display: { xs: 'none', sm: 'inline-flex' }, height: 22, flexShrink: 0 }}
+                  />
 
-                  {/* Actions */}
                   <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                     <Tooltip title="Edit" arrow>
                       <IconButton size="small" onClick={() => openEditTask(task)}>
@@ -502,9 +488,9 @@ export default function ProjectDetailPage() {
             ))}
           </Paper>
         )
-      )}
+      }
 
-      {/* ── Dialogs ─────────────────────────────────────────────────────── */}
+
       <TaskDialog
         open={taskDialogOpen}
         onClose={() => setTaskDialogOpen(false)}
@@ -535,6 +521,35 @@ export default function ProjectDetailPage() {
           onMembersChanged={setMembers}
         />
       )}
+
+      {/* Delete task confirmation */}
+      <Dialog
+        open={!!deleteTaskTarget}
+        onClose={() => !deletingTask && setDeleteTaskTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete task?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Permanently delete <strong>{deleteTaskTarget?.title}</strong>? This action cannot be
+            undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteTaskTarget(null)} disabled={deletingTask}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDeleteTask}
+            disabled={deletingTask}
+          >
+            {deletingTask ? 'Deleting…' : 'Delete Task'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Delete project confirmation */}
       <Dialog
