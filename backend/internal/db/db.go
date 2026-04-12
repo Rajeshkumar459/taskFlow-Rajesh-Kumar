@@ -321,8 +321,9 @@ type Task struct {
 }
 
 type TaskFilter struct {
-	Status     *string
-	AssigneeID *uuid.UUID
+	Status         *string
+	AssigneeID     *uuid.UUID
+	UnassignedOnly bool
 }
 
 func (d *DB) GetTasksByProject(ctx context.Context, projectID uuid.UUID, filter TaskFilter) ([]Task, error) {
@@ -334,7 +335,9 @@ func (d *DB) GetTasksByProject(ctx context.Context, projectID uuid.UUID, filter 
 		args = append(args, *filter.Status)
 		query += fmt.Sprintf(" AND status = $%d", len(args))
 	}
-	if filter.AssigneeID != nil {
+	if filter.UnassignedOnly {
+		query += " AND assignee_id IS NULL"
+	} else if filter.AssigneeID != nil {
 		args = append(args, *filter.AssigneeID)
 		query += fmt.Sprintf(" AND assignee_id = $%d", len(args))
 	}
@@ -451,8 +454,9 @@ type AssigneeCount struct {
 }
 
 type ProjectStats struct {
-	ByStatus   []StatusCount   `json:"by_status"`
-	ByAssignee []AssigneeCount `json:"by_assignee"`
+	ByStatus     []StatusCount   `json:"by_status"`
+	ByAssignee   []AssigneeCount `json:"by_assignee"`
+	OverdueCount int             `json:"overdue_count"`
 }
 
 func (d *DB) GetProjectStats(ctx context.Context, projectID uuid.UUID) (*ProjectStats, error) {
@@ -464,7 +468,10 @@ func (d *DB) GetProjectStats(ctx context.Context, projectID uuid.UUID) (*Project
 	}
 	defer statusRows.Close()
 
-	stats := &ProjectStats{}
+	stats := &ProjectStats{
+		ByStatus:   []StatusCount{},
+		ByAssignee: []AssigneeCount{},
+	}
 	for statusRows.Next() {
 		var sc StatusCount
 		if err := statusRows.Scan(&sc.Status, &sc.Count); err != nil {
@@ -495,5 +502,17 @@ func (d *DB) GetProjectStats(ctx context.Context, projectID uuid.UUID) (*Project
 		}
 		stats.ByAssignee = append(stats.ByAssignee, ac)
 	}
-	return stats, assigneeRows.Err()
+	if err := assigneeRows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := d.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM tasks
+		 WHERE project_id = $1 AND due_date < CURRENT_DATE AND status != 'done'`,
+		projectID,
+	).Scan(&stats.OverdueCount); err != nil {
+		return nil, err
+	}
+
+	return stats, nil
 }

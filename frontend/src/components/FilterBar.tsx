@@ -53,6 +53,7 @@ export default function FilterBar({
           onChange={(e) => onAssigneeChange(e.target.value)}
         >
           <MenuItem value="">All</MenuItem>
+          <MenuItem value="unassigned">Unassigned</MenuItem>
           {projectMembers.map((m) => (
             <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
           ))}

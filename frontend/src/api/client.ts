@@ -1,6 +1,6 @@
-const TOKEN_KEY = 'taskflow_token'
+export const TOKEN_KEY = 'taskflow_token'
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8080'
+export const BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8080'
 
 export class ApiError extends Error {
   status: number

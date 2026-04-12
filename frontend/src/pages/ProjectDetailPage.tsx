@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -10,20 +10,27 @@ import Divider from '@mui/material/Divider'
 import Chip from '@mui/material/Chip'
 import Tooltip from '@mui/material/Tooltip'
 import Paper from '@mui/material/Paper'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogActions from '@mui/material/DialogActions'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import ToggleButton from '@mui/material/ToggleButton'
 import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import ViewKanbanIcon from '@mui/icons-material/ViewKanban'
-import { getProject } from '../api/projects'
+import { getProject, deleteProject } from '../api/projects'
 import { getTasks, updateTask, deleteTask } from '../api/tasks'
 import { getUsers } from '../api/users'
 import { ApiError } from '../api/client'
+import { useProjectSSE } from '../hooks/useProjectSSE'
 import type { Task, Project, User, TaskStatus, ProjectMember } from '../types'
 import TaskStatusChip from '../components/TaskStatusChip'
 import TaskDialog from '../components/TaskDialog'
@@ -33,25 +40,36 @@ import EditProjectDialog from '../components/EditProjectDialog'
 import KanbanBoard from '../components/KanbanBoard'
 import { useAuth } from '../contexts/AuthContext'
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8080'
-const TOKEN_KEY = 'taskflow_token'
-
 const PRIORITY_COLORS: Record<string, 'default' | 'warning' | 'error'> = {
   low: 'default',
   medium: 'warning',
   high: 'error',
 }
 
-type ViewMode = 'list' | 'kanban'
+const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }
 
-type SSEEvent =
-  | { type: 'task_created'; payload: Task }
-  | { type: 'task_updated'; payload: Task }
-  | { type: 'task_deleted'; payload: { task_id: string } }
-  | { type: 'member_added'; payload: ProjectMember }
-  | { type: 'member_updated'; payload: ProjectMember }
-  | { type: 'member_removed'; payload: { user_id: string } }
-  | { type: 'connected' }
+function sortTasks(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    const pDiff = (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1)
+    if (pDiff !== 0) return pDiff
+    if (!a.due_date && !b.due_date) return 0
+    if (!a.due_date) return 1
+    if (!b.due_date) return -1
+    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+  })
+}
+
+function getDueDateStatus(dueDate: string | undefined, status: TaskStatus): 'overdue' | 'due-soon' | 'normal' | null {
+  if (!dueDate || status === 'done') return null
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const due = new Date(dueDate); due.setHours(0, 0, 0, 0)
+  const diffDays = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  if (diffDays < 0) return 'overdue'
+  if (diffDays <= 3) return 'due-soon'
+  return 'normal'
+}
+
+type ViewMode = 'list' | 'kanban'
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -74,8 +92,8 @@ export default function ProjectDetailPage() {
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus | undefined>()
   const [memberDialogOpen, setMemberDialogOpen] = useState(false)
   const [editProjectOpen, setEditProjectOpen] = useState(false)
-
-  const esRef = useRef<EventSource | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const loadProject = useCallback(async () => {
     if (!id) return
@@ -96,50 +114,14 @@ export default function ProjectDetailPage() {
 
   useEffect(() => { loadProject() }, [loadProject])
 
-  // SSE subscription
-  useEffect(() => {
-    if (!id) return
-    const token = localStorage.getItem(TOKEN_KEY)
-    if (!token) return
-
-    const url = `${BASE_URL}/projects/${id}/events?token=${encodeURIComponent(token)}`
-    const es = new EventSource(url)
-    esRef.current = es
-
-    es.onmessage = (e: MessageEvent) => {
-      try {
-        const msg = JSON.parse(e.data) as SSEEvent
-        switch (msg.type) {
-          case 'task_created':
-            setTasks((prev) =>
-              prev.find((t) => t.id === msg.payload.id) ? prev : [...prev, msg.payload]
-            )
-            break
-          case 'task_updated':
-            setTasks((prev) => prev.map((t) => (t.id === msg.payload.id ? msg.payload : t)))
-            break
-          case 'task_deleted':
-            setTasks((prev) => prev.filter((t) => t.id !== msg.payload.task_id))
-            break
-          case 'member_added':
-            setMembers((prev) =>
-              prev.find((m) => m.user_id === msg.payload.user_id) ? prev : [...prev, msg.payload]
-            )
-            break
-          case 'member_updated':
-            setMembers((prev) =>
-              prev.map((m) => (m.user_id === msg.payload.user_id ? msg.payload : m))
-            )
-            break
-          case 'member_removed':
-            setMembers((prev) => prev.filter((m) => m.user_id !== msg.payload.user_id))
-            break
-        }
-      } catch { /* ignore malformed */ }
-    }
-
-    return () => { es.close(); esRef.current = null }
-  }, [id])
+  useProjectSSE(id, {
+    onTaskCreated:   (task) => setTasks((prev) => prev.find((t) => t.id === task.id) ? prev : [...prev, task]),
+    onTaskUpdated:   (task) => setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t))),
+    onTaskDeleted:   (taskId) => setTasks((prev) => prev.filter((t) => t.id !== taskId)),
+    onMemberAdded:   (m) => setMembers((prev) => prev.find((x) => x.user_id === m.user_id) ? prev : [...prev, m]),
+    onMemberUpdated: (m) => setMembers((prev) => prev.map((x) => (x.user_id === m.user_id ? m : x))),
+    onMemberRemoved: (userId) => setMembers((prev) => prev.filter((m) => m.user_id !== userId)),
+  })
 
   // Re-fetch filtered tasks when filters change (list view)
   const applyFilters = useCallback(async () => {
@@ -188,6 +170,20 @@ export default function ProjectDetailPage() {
       setTasks((ts) => ts.map((t) => (t.id === updated.id ? updated : t)))
     } catch {
       setTasks(prev)
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!id) return
+    setDeleting(true)
+    try {
+      await deleteProject(id)
+      navigate('/projects')
+    } catch (err) {
+      setDeleteConfirmOpen(false)
+      setError(err instanceof ApiError ? err.message : 'Failed to delete project')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -244,11 +240,18 @@ export default function ProjectDetailPage() {
               {project?.name}
             </Typography>
             {isAdmin && (
-              <Tooltip title="Edit project">
-                <IconButton size="small" onClick={() => setEditProjectOpen(true)}>
-                  <EditOutlinedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
+              <>
+                <Tooltip title="Edit project">
+                  <IconButton size="small" onClick={() => setEditProjectOpen(true)}>
+                    <EditOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete project">
+                  <IconButton size="small" color="error" onClick={() => setDeleteConfirmOpen(true)}>
+                    <DeleteForeverIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </>
             )}
           </Box>
           {project?.description && (
@@ -324,7 +327,7 @@ export default function ProjectDetailPage() {
       {/* ── Content ────────────────────────────────────────────────────── */}
       {viewMode === 'kanban' ? (
         <KanbanBoard
-          tasks={tasks}
+          tasks={sortTasks(tasks)}
           userById={userById}
           isAdmin={isAdmin}
           onTaskSaved={handleTaskSaved}
@@ -361,7 +364,7 @@ export default function ProjectDetailPage() {
           </Box>
         ) : (
           <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-            {tasks.map((task, idx) => (
+            {sortTasks(tasks).map((task, idx) => (
               <Box key={task.id}>
                 {idx > 0 && <Divider />}
                 <Box
@@ -415,11 +418,17 @@ export default function ProjectDetailPage() {
                     sx={{ textTransform: 'capitalize' }}
                   />
 
-                  {task.due_date && (
-                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 80 }}>
-                      {new Date(task.due_date).toLocaleDateString()}
-                    </Typography>
-                  )}
+                  {task.due_date && (() => {
+                    const ds = getDueDateStatus(task.due_date, task.status)
+                    const color = ds === 'overdue' ? 'error.main' : ds === 'due-soon' ? 'warning.main' : 'text.secondary'
+                    return (
+                      <Tooltip title={ds === 'overdue' ? 'Overdue' : ds === 'due-soon' ? 'Due soon' : ''}>
+                        <Typography variant="caption" sx={{ minWidth: 80, color, fontWeight: ds !== 'normal' ? 600 : 400 }}>
+                          {new Date(task.due_date).toLocaleDateString()}
+                        </Typography>
+                      </Tooltip>
+                    )
+                  })()}
 
                   <Box sx={{ display: 'flex', gap: 0.5 }}>
                     <Tooltip title="Edit">
@@ -473,6 +482,35 @@ export default function ProjectDetailPage() {
           onMembersChanged={setMembers}
         />
       )}
+
+      {/* Delete project confirmation */}
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => !deleting && setDeleteConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete project?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Permanently delete <strong>{project?.name}</strong> and all its tasks? This action
+            cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteProject}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting…' : 'Delete Project'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

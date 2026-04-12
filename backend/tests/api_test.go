@@ -10,6 +10,7 @@ import (
 
 	"taskflow/internal/api"
 	"taskflow/internal/db"
+	"taskflow/internal/events"
 )
 
 func setupRouter(t *testing.T) http.Handler {
@@ -26,7 +27,8 @@ func setupRouter(t *testing.T) http.Handler {
 	}
 	t.Cleanup(database.Close)
 
-	return api.NewRouter(database, "test-secret")
+	broker := events.NewBroker()
+	return api.NewRouter(database, broker, "test-secret")
 }
 
 func TestHealthEndpoint(t *testing.T) {

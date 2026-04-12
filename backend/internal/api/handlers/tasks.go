@@ -49,12 +49,16 @@ func (h *TaskHandler) List(c *gin.Context) {
 		filter.Status = &s
 	}
 	if a := c.Query("assignee"); a != "" {
-		aid, err := uuid.Parse(a)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignee id"})
-			return
+		if a == "unassigned" {
+			filter.UnassignedOnly = true
+		} else {
+			aid, err := uuid.Parse(a)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignee id"})
+				return
+			}
+			filter.AssigneeID = &aid
 		}
-		filter.AssigneeID = &aid
 	}
 
 	tasks, err := h.db.GetTasksByProject(c.Request.Context(), projectID, filter)

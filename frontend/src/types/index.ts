@@ -63,9 +63,18 @@ export interface AssigneeCount {
 export interface ProjectStats {
   by_status: StatusCount[]
   by_assignee: AssigneeCount[]
+  overdue_count: number
 }
 
 export interface ApiError {
   error: string
   fields?: Record<string, string>
+}
+
+export interface TaskCounts {
+  todo: number
+  in_progress: number
+  done: number
+  total: number
+  overdue: number
 }

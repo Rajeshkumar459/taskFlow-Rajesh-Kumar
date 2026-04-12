@@ -37,7 +37,7 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import AddIcon from '@mui/icons-material/Add'
 import { updateTask } from '../api/tasks'
-import type { Task, TaskStatus, User } from '../types'
+import type { Task, TaskStatus } from '../types'
 
 // ─── Column configuration ────────────────────────────────────────────────────
 
@@ -86,6 +86,16 @@ const PRIORITY_STYLE: Record<string, { bg: string; color: string; label: string 
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getDueDateStatus(dueDate: string | undefined, status: TaskStatus): 'overdue' | 'due-soon' | 'normal' | null {
+  if (!dueDate || status === 'done') return null
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const due = new Date(dueDate); due.setHours(0, 0, 0, 0)
+  const diffDays = (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  if (diffDays < 0) return 'overdue'
+  if (diffDays <= 3) return 'due-soon'
+  return 'normal'
+}
 
 function distributeByStatus(tasks: Task[]): Record<TaskStatus, Task[]> {
   const result: Record<TaskStatus, Task[]> = { todo: [], in_progress: [], done: [] }
@@ -249,14 +259,18 @@ function TaskCardContent({ task, userById, isAdmin, isDragging, onEdit, onDelete
               </Typography>
             </Box>
           )}
-          {task.due_date && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, ml: 'auto' }}>
-              <CalendarTodayIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
-              <Typography variant="caption" color="text.secondary">
-                {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-              </Typography>
-            </Box>
-          )}
+          {task.due_date && (() => {
+            const ds = getDueDateStatus(task.due_date, task.status)
+            const color = ds === 'overdue' ? 'error.main' : ds === 'due-soon' ? 'warning.main' : 'text.disabled'
+            return (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, ml: 'auto' }}>
+                <CalendarTodayIcon sx={{ fontSize: 11, color }} />
+                <Typography variant="caption" sx={{ color, fontWeight: ds && ds !== 'normal' ? 600 : 400 }}>
+                  {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </Typography>
+              </Box>
+            )
+          })()}
         </Box>
       )}
     </Paper>
