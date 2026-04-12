@@ -28,9 +28,9 @@ export default function FilterBar({
   const hasFilters = statusFilter !== '' || assigneeFilter !== ''
 
   return (
-    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+    <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 2 }, flexWrap: 'wrap', alignItems: 'center' }}>
       {!hideStatus && (
-        <FormControl size="small" sx={{ minWidth: 140 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 140 }, flex: { xs: 1, sm: 'none' } }}>
           <InputLabel>Status</InputLabel>
           <Select
             value={statusFilter}
@@ -45,7 +45,7 @@ export default function FilterBar({
         </FormControl>
       )}
 
-      <FormControl size="small" sx={{ minWidth: 160 }}>
+      <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 160 }, flex: { xs: 1, sm: 'none' } }}>
         <InputLabel>Assignee</InputLabel>
         <Select
           value={assigneeFilter}
@@ -61,7 +61,7 @@ export default function FilterBar({
       </FormControl>
 
       {hasFilters && (
-        <Button size="small" onClick={onClear}>
+        <Button size="small" onClick={onClear} sx={{ whiteSpace: 'nowrap' }}>
           Clear filters
         </Button>
       )}

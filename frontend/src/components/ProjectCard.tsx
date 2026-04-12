@@ -16,10 +16,10 @@ interface Props {
   taskCounts?: TaskCounts
 }
 
-const STATUS_DOT: Array<{ key: keyof Omit<TaskCounts, 'total'>; color: string; label: string }> = [
-  { key: 'todo',        color: '#9e9e9e', label: 'To Do'       },
-  { key: 'in_progress', color: '#1976d2', label: 'In Progress' },
-  { key: 'done',        color: '#2e7d32', label: 'Done'        },
+const STATUS_DOT: Array<{ key: keyof Omit<TaskCounts, 'total' | 'overdue'>; color: string; label: string }> = [
+  { key: 'todo',        color: '#64748b', label: 'To Do'       },
+  { key: 'in_progress', color: '#f59e0b', label: 'In Progress' },
+  { key: 'done',        color: '#10b981', label: 'Done'        },
 ]
 
 export default function ProjectCard({ project, taskCounts }: Props) {
@@ -33,8 +33,12 @@ export default function ProjectCard({ project, taskCounts }: Props) {
       variant="outlined"
       sx={{
         height: '100%',
-        transition: 'box-shadow 0.2s, border-color 0.2s',
-        '&:hover': { boxShadow: 4, borderColor: 'primary.main' },
+        transition: 'box-shadow 0.2s, border-color 0.2s, transform 0.15s',
+        '&:hover': {
+          boxShadow: 4,
+          borderColor: 'primary.main',
+          transform: 'translateY(-2px)',
+        },
       }}
     >
       <CardActionArea
@@ -90,11 +94,10 @@ export default function ProjectCard({ project, taskCounts }: Props) {
                   sx={{
                     height: 5,
                     borderRadius: 3,
-                    bgcolor: 'grey.200',
+                    bgcolor: 'action.hover',
                     mb: 1,
                     '& .MuiLinearProgress-bar': {
-                      bgcolor: pct === 100 ? 'success.main' : 'primary.main',
-                      borderRadius: 3,
+                      bgcolor: pct === 100 ? '#10b981' : 'primary.main',
                     },
                   }}
                 />

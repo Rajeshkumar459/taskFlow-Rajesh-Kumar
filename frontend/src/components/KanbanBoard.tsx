@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { alpha, useTheme } from '@mui/material/styles'
 import {
   DndContext,
   DragOverlay,
@@ -57,32 +58,32 @@ const COLUMN_CONFIG: ColumnConfig[] = [
     id: 'todo',
     label: 'To Do',
     icon: <RadioButtonUncheckedIcon fontSize="small" />,
-    accentColor: '#757575',
-    bgColor: '#f8f8f8',
+    accentColor: '#64748b',
+    bgColor: '#f8fafc',
     emptyLabel: 'Nothing here yet',
   },
   {
     id: 'in_progress',
     label: 'In Progress',
     icon: <AccessTimeIcon fontSize="small" />,
-    accentColor: '#1976d2',
-    bgColor: '#f0f7ff',
+    accentColor: '#f59e0b',
+    bgColor: '#fffbeb',
     emptyLabel: 'Drag tasks here to start',
   },
   {
     id: 'done',
     label: 'Done',
     icon: <CheckCircleIcon fontSize="small" />,
-    accentColor: '#2e7d32',
-    bgColor: '#f1faf3',
+    accentColor: '#10b981',
+    bgColor: '#f0fdf4',
     emptyLabel: 'Completed tasks appear here',
   },
 ]
 
-const PRIORITY_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  low:    { bg: '#f5f5f5', color: '#757575', label: 'Low' },
-  medium: { bg: '#fff8e1', color: '#f57c00', label: 'Medium' },
-  high:   { bg: '#ffeaea', color: '#c62828', label: 'High' },
+const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
+  low:    { color: '#64748b', label: 'Low'    },
+  medium: { color: '#f59e0b', label: 'Medium' },
+  high:   { color: '#ef4444', label: 'High'   },
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -114,9 +115,9 @@ function getInitials(name: string): string {
     .toUpperCase()
 }
 
-// Simple deterministic color from string
+// Simple deterministic color from string — vivid enough for both light and dark backgrounds
 function avatarColor(str: string): string {
-  const colors = ['#1976d2', '#388e3c', '#7b1fa2', '#d32f2f', '#f57c00', '#0097a7']
+  const colors = ['#4f46e5', '#0891b2', '#059669', '#7c3aed', '#b45309', '#be123c']
   let h = 0
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffffffff
   return colors[Math.abs(h) % colors.length]
@@ -137,6 +138,8 @@ interface TaskCardProps {
 function TaskCardContent({ task, userById, isAdmin, isDragging, onEdit, onDelete }: TaskCardProps) {
   const p = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE.medium
   const assigneeName = task.assignee_id ? userById.get(task.assignee_id) : undefined
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
 
   return (
     <Paper
@@ -149,8 +152,13 @@ function TaskCardContent({ task, userById, isAdmin, isDragging, onEdit, onDelete
         userSelect: 'none',
         transition: 'box-shadow 0.15s, transform 0.1s',
         transform: isDragging ? 'rotate(2deg) scale(1.02)' : 'none',
+        border: '1px solid',
+        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
         '&:hover': isDragging ? {} : {
-          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          boxShadow: isDark
+            ? '0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)'
+            : '0 4px 16px rgba(0,0,0,0.1)',
+          borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)',
         },
         '& .card-actions': { opacity: 0, transition: 'opacity 0.15s' },
         '&:hover .card-actions': { opacity: 1 },
@@ -166,11 +174,12 @@ function TaskCardContent({ task, userById, isAdmin, isDragging, onEdit, onDelete
             px: 0.75,
             py: 0.25,
             borderRadius: 1,
-            bgcolor: p.bg,
+            bgcolor: alpha(p.color, isDark ? 0.2 : 0.1),
             color: p.color,
-            fontSize: '0.7rem',
+            border: `1px solid ${alpha(p.color, isDark ? 0.35 : 0.2)}`,
+            fontSize: '0.68rem',
             fontWeight: 700,
-            letterSpacing: 0.3,
+            letterSpacing: 0.4,
           }}
         >
           {p.label.toUpperCase()}
@@ -316,6 +325,8 @@ interface ColumnProps {
 function KanbanColumn({ config, tasks, isOver, userById, isAdmin, onEdit, onDelete, onAddTask }: ColumnProps) {
   const { setNodeRef, isOver: droppableOver } = useDroppable({ id: config.id })
   const highlighting = isOver || droppableOver
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
 
   return (
     <Box
@@ -325,9 +336,17 @@ function KanbanColumn({ config, tasks, isOver, userById, isAdmin, onEdit, onDele
         minWidth: 0,
         borderRadius: 3,
         overflow: 'hidden',
-        bgcolor: highlighting ? `${config.accentColor}14` : config.bgColor,
-        border: '2px solid',
-        borderColor: highlighting ? config.accentColor : 'transparent',
+        bgcolor: highlighting
+          ? alpha(config.accentColor, isDark ? 0.15 : 0.08)
+          : isDark
+            ? alpha(config.accentColor, 0.06)
+            : config.bgColor,
+        border: '1.5px solid',
+        borderColor: highlighting
+          ? alpha(config.accentColor, 0.5)
+          : isDark
+            ? alpha(config.accentColor, 0.15)
+            : alpha(config.accentColor, 0.12),
         transition: 'border-color 0.15s, background-color 0.15s',
       }}
     >
@@ -340,8 +359,8 @@ function KanbanColumn({ config, tasks, isOver, userById, isAdmin, onEdit, onDele
           px: 2,
           py: 1.5,
           borderBottom: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
+          borderColor: isDark ? alpha(config.accentColor, 0.15) : alpha(config.accentColor, 0.1),
+          bgcolor: isDark ? alpha(config.accentColor, 0.08) : alpha(config.accentColor, 0.05),
         }}
       >
         <Box sx={{ color: config.accentColor, display: 'flex', alignItems: 'center' }}>
@@ -376,7 +395,7 @@ function KanbanColumn({ config, tasks, isOver, userById, isAdmin, onEdit, onDele
           flexDirection: 'column',
           gap: 1,
           minHeight: 120,
-          maxHeight: 'calc(100vh - 320px)',
+          maxHeight: { xs: 'calc(100vh - 280px)', sm: 'calc(100vh - 320px)' },
         }}
       >
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
@@ -401,8 +420,10 @@ function KanbanColumn({ config, tasks, isOver, userById, isAdmin, onEdit, onDele
               justifyContent: 'center',
               py: 3,
               borderRadius: 2,
-              border: '2px dashed',
-              borderColor: highlighting ? config.accentColor : 'divider',
+              border: '1.5px dashed',
+              borderColor: highlighting
+                ? alpha(config.accentColor, 0.6)
+                : alpha(config.accentColor, isDark ? 0.2 : 0.15),
               transition: 'border-color 0.15s',
             }}
           >
@@ -605,12 +626,15 @@ export default function KanbanBoard({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
+      {/* Horizontal scroll container for mobile */}
+      <Box sx={{ overflowX: { xs: 'auto', md: 'visible' }, mx: { xs: -1, sm: 0 }, px: { xs: 1, sm: 0 }, pb: 1 }}>
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 2,
+          gridTemplateColumns: { xs: 'repeat(3, minmax(260px, 1fr))', md: 'repeat(3, 1fr)' },
+          gap: { xs: 1.5, sm: 2 },
           alignItems: 'start',
+          minWidth: { xs: '800px', md: 'unset' },
         }}
       >
         {COLUMN_CONFIG.map((col) => (
@@ -626,6 +650,7 @@ export default function KanbanBoard({
             onAddTask={() => onOpenCreateTask(col.id)}
           />
         ))}
+      </Box>
       </Box>
 
       <DragOverlay dropAnimation={{ duration: 180, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>

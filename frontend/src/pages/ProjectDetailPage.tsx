@@ -8,6 +8,7 @@ import Skeleton from '@mui/material/Skeleton'
 import Alert from '@mui/material/Alert'
 import Divider from '@mui/material/Divider'
 import Chip from '@mui/material/Chip'
+import { alpha } from '@mui/material/styles'
 import Tooltip from '@mui/material/Tooltip'
 import Paper from '@mui/material/Paper'
 import Dialog from '@mui/material/Dialog'
@@ -40,10 +41,10 @@ import EditProjectDialog from '../components/EditProjectDialog'
 import KanbanBoard from '../components/KanbanBoard'
 import { useAuth } from '../contexts/AuthContext'
 
-const PRIORITY_COLORS: Record<string, 'default' | 'warning' | 'error'> = {
-  low: 'default',
-  medium: 'warning',
-  high: 'error',
+const PRIORITY_STYLE: Record<string, { color: string; label: string }> = {
+  low:    { color: '#64748b', label: 'Low'    },
+  medium: { color: '#f59e0b', label: 'Medium' },
+  high:   { color: '#ef4444', label: 'High'   },
 }
 
 const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }
@@ -83,7 +84,7 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban')
   const [statusFilter, setStatusFilter] = useState<TaskStatus | ''>('')
   const [assigneeFilter, setAssigneeFilter] = useState('')
 
@@ -229,80 +230,88 @@ export default function ProjectDetailPage() {
   return (
     <Box>
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 3, gap: 2, flexWrap: 'wrap' }}>
-        <IconButton onClick={() => navigate('/projects')} size="small" sx={{ mt: 0.5 }}>
-          <ArrowBackIcon />
-        </IconButton>
+      <Box sx={{ mb: 3 }}>
+        {/* Row 1: Back + title + admin icons */}
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 0.5 }}>
+          <IconButton onClick={() => navigate('/projects')} size="small" sx={{ mt: 0.4, flexShrink: 0 }}>
+            <ArrowBackIcon />
+          </IconButton>
 
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="h4" fontWeight={600} noWrap>
-              {project?.name}
-            </Typography>
-            {isAdmin && (
-              <>
-                <Tooltip title="Edit project">
-                  <IconButton size="small" onClick={() => setEditProjectOpen(true)}>
-                    <EditOutlinedIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Delete project">
-                  <IconButton size="small" color="error" onClick={() => setDeleteConfirmOpen(true)}>
-                    <DeleteForeverIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+              <Typography variant="h5" fontWeight={700}
+                sx={{ wordBreak: 'break-word', lineHeight: 1.3, mr: 0.5 }}>
+                {project?.name}
+              </Typography>
+              {isAdmin && (
+                <>
+                  <Tooltip title="Edit project" arrow>
+                    <IconButton size="small" onClick={() => setEditProjectOpen(true)}>
+                      <EditOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete project" arrow>
+                    <IconButton size="small" color="error" onClick={() => setDeleteConfirmOpen(true)}>
+                      <DeleteForeverIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+            </Box>
+            {project?.description && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                {project.description}
+              </Typography>
             )}
-          </Box>
-          {project?.description && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-              {project.description}
-            </Typography>
-          )}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-            <Typography variant="caption" color="text.secondary">
-              {members.length} member{members.length !== 1 ? 's' : ''}
-            </Typography>
-            {isAdmin && (
-              <Button
-                size="small"
-                startIcon={<PeopleOutlineIcon />}
-                onClick={() => setMemberDialogOpen(true)}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', minWidth: 0 }}
-              >
-                Manage
-              </Button>
-            )}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
+              <Typography variant="caption" color="text.secondary">
+                {members.length} member{members.length !== 1 ? 's' : ''}
+              </Typography>
+              {isAdmin && (
+                <Button
+                  size="small"
+                  startIcon={<PeopleOutlineIcon sx={{ fontSize: '14px !important' }} />}
+                  onClick={() => setMemberDialogOpen(true)}
+                  sx={{ fontSize: '0.75rem', minWidth: 0, px: 1, py: 0.25 }}
+                >
+                  Manage
+                </Button>
+              )}
+            </Box>
           </Box>
         </Box>
 
-        {/* View toggle */}
-        <ToggleButtonGroup
-          value={viewMode}
-          exclusive
-          onChange={(_, v) => { if (v) setViewMode(v) }}
-          size="small"
-          sx={{ alignSelf: 'center' }}
-        >
-          <ToggleButton value="list" aria-label="List view">
-            <Tooltip title="List view">
-              <ViewListIcon fontSize="small" />
-            </Tooltip>
-          </ToggleButton>
-          <ToggleButton value="kanban" aria-label="Kanban view">
-            <Tooltip title="Kanban view">
-              <ViewKanbanIcon fontSize="small" />
-            </Tooltip>
-          </ToggleButton>
-        </ToggleButtonGroup>
+        {/* Row 2: View toggle (right-aligned) + Add Task */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: { xs: 0, sm: '44px' }, mt: { xs: 1.5, sm: 1 } }}>
+          <Box sx={{ flex: 1 }} />
 
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => openCreateTask()}
-        >
-          Add Task
-        </Button>
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={(_, v) => { if (v) setViewMode(v) }}
+            size="small"
+          >
+            <ToggleButton value="list" aria-label="List view">
+              <Tooltip title="List view" arrow>
+                <ViewListIcon fontSize="small" />
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="kanban" aria-label="Kanban view">
+              <Tooltip title="Kanban view" arrow>
+                <ViewKanbanIcon fontSize="small" />
+              </Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
+
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            size="small"
+            onClick={() => openCreateTask()}
+          >
+            Add Task
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -370,16 +379,16 @@ export default function ProjectDetailPage() {
                 <Box
                   sx={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 2,
-                    px: 3,
-                    py: 2,
-                    flexWrap: 'wrap',
+                    alignItems: { xs: 'flex-start', sm: 'center' },
+                    gap: { xs: 1.5, sm: 2 },
+                    px: { xs: 2, sm: 3 },
+                    py: { xs: 1.5, sm: 2 },
                     '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
-                  <Tooltip title="Click to advance status">
-                    <span>
+                  {/* Status chip — stays left on all sizes */}
+                  <Tooltip title="Click to advance status" arrow>
+                    <span style={{ flexShrink: 0, paddingTop: 2 }}>
                       <TaskStatusChip
                         status={task.status}
                         onClick={() => handleStatusChange(task, nextStatus(task.status))}
@@ -387,57 +396,101 @@ export default function ProjectDetailPage() {
                     </span>
                   </Tooltip>
 
+                  {/* Main content: title + meta */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       variant="body1"
                       fontWeight={500}
-                      noWrap
-                      sx={task.status === 'done'
-                        ? { textDecoration: 'line-through', color: 'text.disabled' }
-                        : {}}
+                      sx={{
+                        ...(task.status === 'done'
+                          ? { textDecoration: 'line-through', color: 'text.disabled' }
+                          : {}),
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: { xs: 'normal', sm: 'nowrap' },
+                        wordBreak: 'break-word',
+                      }}
                     >
                       {task.title}
                     </Typography>
                     {task.description && (
-                      <Typography variant="caption" color="text.secondary" noWrap>
+                      <Typography variant="caption" color="text.secondary"
+                        sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {task.description}
                       </Typography>
                     )}
-                    {task.assignee_id && (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        Assigned to: {userById.get(task.assignee_id) ?? task.assignee_id}
-                      </Typography>
-                    )}
+                    {/* Inline meta row — due date + assignee (priority moved to right) */}
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5, alignItems: 'center' }}>
+                      {/* Priority chip — only shown on xs (on sm+ it's in the right column) */}
+                      {(() => {
+                        const ps = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE.medium
+                        return (
+                          <Chip
+                            label={ps.label}
+                            size="small"
+                            sx={{
+                              display: { xs: 'inline-flex', sm: 'none' },
+                              height: 20,
+                              bgcolor: alpha(ps.color, 0.1),
+                              color: ps.color,
+                              border: `1px solid ${alpha(ps.color, 0.3)}`,
+                              fontWeight: 600,
+                              fontSize: '0.68rem',
+                              '.MuiChip-label': { px: 1 },
+                            }}
+                          />
+                        )
+                      })()}
+                      {task.due_date && (() => {
+                        const ds = getDueDateStatus(task.due_date, task.status)
+                        const color = ds === 'overdue' ? 'error.main' : ds === 'due-soon' ? 'warning.main' : 'text.disabled'
+                        return (
+                          <Tooltip title={ds === 'overdue' ? 'Overdue' : ds === 'due-soon' ? 'Due soon' : ''} arrow>
+                            <Typography variant="caption" sx={{ color, fontWeight: ds && ds !== 'normal' ? 600 : 400 }}>
+                              {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </Typography>
+                          </Tooltip>
+                        )
+                      })()}
+                      {task.assignee_id && (
+                        <Typography variant="caption" color="text.secondary">
+                          {userById.get(task.assignee_id) ?? '—'}
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
 
-                  <Chip
-                    label={task.priority}
-                    size="small"
-                    color={PRIORITY_COLORS[task.priority]}
-                    variant="outlined"
-                    sx={{ textTransform: 'capitalize' }}
-                  />
-
-                  {task.due_date && (() => {
-                    const ds = getDueDateStatus(task.due_date, task.status)
-                    const color = ds === 'overdue' ? 'error.main' : ds === 'due-soon' ? 'warning.main' : 'text.secondary'
+                  {/* Priority chip — right-aligned, visible on sm+ only */}
+                  {(() => {
+                    const ps = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE.medium
                     return (
-                      <Tooltip title={ds === 'overdue' ? 'Overdue' : ds === 'due-soon' ? 'Due soon' : ''}>
-                        <Typography variant="caption" sx={{ minWidth: 80, color, fontWeight: ds !== 'normal' ? 600 : 400 }}>
-                          {new Date(task.due_date).toLocaleDateString()}
-                        </Typography>
-                      </Tooltip>
+                      <Chip
+                        label={ps.label}
+                        size="small"
+                        sx={{
+                          display: { xs: 'none', sm: 'inline-flex' },
+                          height: 22,
+                          bgcolor: alpha(ps.color, 0.1),
+                          color: ps.color,
+                          border: `1px solid ${alpha(ps.color, 0.3)}`,
+                          fontWeight: 600,
+                          fontSize: '0.7rem',
+                          flexShrink: 0,
+                          '.MuiChip-label': { px: 1 },
+                        }}
+                      />
                     )
                   })()}
 
-                  <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    <Tooltip title="Edit">
+                  {/* Actions */}
+                  <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                    <Tooltip title="Edit" arrow>
                       <IconButton size="small" onClick={() => openEditTask(task)}>
                         <EditOutlinedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                     {isAdmin && (
-                      <Tooltip title="Delete">
+                      <Tooltip title="Delete" arrow>
                         <IconButton size="small" color="error" onClick={() => handleDeleteTask(task)}>
                           <DeleteOutlineIcon fontSize="small" />
                         </IconButton>

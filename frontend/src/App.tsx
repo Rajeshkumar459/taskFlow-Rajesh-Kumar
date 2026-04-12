@@ -1,20 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { AppThemeProvider } from './contexts/ThemeContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AppLayout from './components/AppLayout'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
-
-const theme = createTheme({
-  palette: {
-    primary: { main: '#1976d2' },
-    background: { default: '#f8fafc' },
-  },
-  shape: { borderRadius: 8 },
-})
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth()
@@ -23,8 +15,7 @@ function RootRedirect() {
 
 export default function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <AppThemeProvider>
       <AuthProvider>
         <BrowserRouter>
           <Routes>
@@ -41,6 +32,6 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       </AuthProvider>
-    </ThemeProvider>
+    </AppThemeProvider>
   )
 }

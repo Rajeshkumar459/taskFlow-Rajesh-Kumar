@@ -125,8 +125,8 @@ export default function TaskDialog({ open, onClose, onSaved, projectId, task, pr
 
   return (
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
-      <DialogTitle>{isEdit ? 'Edit Task' : 'New Task'}</DialogTitle>
-      <DialogContent sx={{ pt: 2 }}>
+      <DialogTitle sx={{ pb: 1 }}>{isEdit ? 'Edit Task' : 'New Task'}</DialogTitle>
+      <DialogContent sx={{ pt: '12px !important' }}>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         <Grid container spacing={2}>
           <Grid size={12}>
@@ -179,7 +179,8 @@ export default function TaskDialog({ open, onClose, onSaved, projectId, task, pr
               </Select>
             </FormControl>
           </Grid>
-          <Grid size={6}>
+          {/* Assignee full-width so autocomplete dropdown has room */}
+          <Grid size={12}>
             <Autocomplete
               options={projectMembers}
               getOptionLabel={(u) => u.name}
@@ -188,7 +189,9 @@ export default function TaskDialog({ open, onClose, onSaved, projectId, task, pr
               renderInput={(params) => <TextField {...params} label="Assignee (optional)" />}
             />
           </Grid>
-          <Grid size={6}>
+          {/* Due date full-width — prevents the native calendar popup from
+              overflowing the dialog when the field is in a narrow half-column */}
+          <Grid size={12}>
             <TextField
               label="Due Date (optional)"
               type="date"
@@ -200,7 +203,7 @@ export default function TaskDialog({ open, onClose, onSaved, projectId, task, pr
           </Grid>
         </Grid>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
+      <DialogActions sx={{ px: 3, pb: 2, pt: 1 }}>
         <Button onClick={handleClose} disabled={loading}>Cancel</Button>
         <Button variant="contained" onClick={handleSubmit} disabled={loading}>
           {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Task'}

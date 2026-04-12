@@ -9,6 +9,7 @@ import Alert from '@mui/material/Alert'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Divider from '@mui/material/Divider'
+import { alpha, useTheme } from '@mui/material/styles'
 import AddIcon from '@mui/icons-material/Add'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import FolderIcon from '@mui/icons-material/Folder'
@@ -42,23 +43,30 @@ interface StatCardProps {
   value: number | null   // null = loading
   icon: React.ReactNode
   accentColor: string
-  bgColor: string
 }
 
-function StatCard({ label, value, icon, accentColor, bgColor }: StatCardProps) {
+function StatCard({ label, value, icon, accentColor }: StatCardProps) {
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+
   return (
     <Paper
       elevation={0}
       sx={{
         p: 2.5,
         borderRadius: 3,
-        bgcolor: bgColor,
+        bgcolor: isDark ? alpha(accentColor, 0.1) : alpha(accentColor, 0.07),
         border: '1px solid',
-        borderColor: 'divider',
+        borderColor: isDark ? alpha(accentColor, 0.2) : alpha(accentColor, 0.15),
         borderLeft: `4px solid ${accentColor}`,
         display: 'flex',
         alignItems: 'center',
         gap: 2,
+        transition: 'transform 0.15s, box-shadow 0.15s',
+        '&:hover': {
+          transform: 'translateY(-1px)',
+          boxShadow: `0 4px 16px ${alpha(accentColor, isDark ? 0.2 : 0.12)}`,
+        },
       }}
     >
       <Box
@@ -66,7 +74,7 @@ function StatCard({ label, value, icon, accentColor, bgColor }: StatCardProps) {
           width: 44,
           height: 44,
           borderRadius: 2,
-          bgcolor: `${accentColor}18`,
+          bgcolor: alpha(accentColor, isDark ? 0.15 : 0.12),
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -80,7 +88,7 @@ function StatCard({ label, value, icon, accentColor, bgColor }: StatCardProps) {
         {value === null ? (
           <Skeleton variant="text" width={40} height={36} />
         ) : (
-          <Typography variant="h4" fontWeight={700} lineHeight={1} color={accentColor}>
+          <Typography variant="h4" fontWeight={700} lineHeight={1} sx={{ color: accentColor }}>
             {value}
           </Typography>
         )}
@@ -93,36 +101,11 @@ function StatCard({ label, value, icon, accentColor, bgColor }: StatCardProps) {
 }
 
 const STATS_CONFIG: Omit<StatCardProps, 'value'>[] = [
-  {
-    label: 'Projects',
-    icon: <FolderIcon />,
-    accentColor: '#1976d2',
-    bgColor: '#f0f7ff',
-  },
-  {
-    label: 'To Do',
-    icon: <RadioButtonUncheckedIcon />,
-    accentColor: '#616161',
-    bgColor: '#f8f8f8',
-  },
-  {
-    label: 'In Progress',
-    icon: <AccessTimeIcon />,
-    accentColor: '#ed6c02',
-    bgColor: '#fff8f0',
-  },
-  {
-    label: 'Done',
-    icon: <CheckCircleIcon />,
-    accentColor: '#2e7d32',
-    bgColor: '#f1faf3',
-  },
-  {
-    label: 'Overdue',
-    icon: <WarningAmberIcon />,
-    accentColor: '#c62828',
-    bgColor: '#fff5f5',
-  },
+  { label: 'Projects',    icon: <FolderIcon />,                accentColor: '#4f46e5' },
+  { label: 'To Do',       icon: <RadioButtonUncheckedIcon />,  accentColor: '#64748b' },
+  { label: 'In Progress', icon: <AccessTimeIcon />,            accentColor: '#f59e0b' },
+  { label: 'Done',        icon: <CheckCircleIcon />,           accentColor: '#10b981' },
+  { label: 'Overdue',     icon: <WarningAmberIcon />,          accentColor: '#ef4444' },
 ]
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -235,9 +218,9 @@ export default function ProjectsPage() {
       )}
 
       {/* ── Stat cards ─────────────────────────────────────────────────── */}
-      <Grid container spacing={2} sx={{ mb: 5 }}>
+      <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mb: 5 }}>
         {STATS_CONFIG.map((cfg, i) => (
-          <Grid key={cfg.label} size={{ xs: 6, sm: 4, md: 'auto' }} sx={{ flex: { md: 1 } }}>
+          <Grid key={cfg.label} size={{ xs: 6, sm: 4, lg: true }}>
             <StatCard {...cfg} value={statValues[i]} />
           </Grid>
         ))}
@@ -260,9 +243,9 @@ export default function ProjectsPage() {
       <Divider sx={{ mb: 3 }} />
 
       {loadingProjects ? (
-        <Grid container spacing={3}>
+        <Grid container spacing={{ xs: 2, sm: 3 }}>
           {Array.from({ length: 3 }).map((_, i) => (
-            <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
+            <Grid key={i} size={{ xs: 12, sm: 6, lg: 4 }}>
               <Card variant="outlined">
                 <CardContent>
                   <Skeleton variant="text" width="60%" height={32} sx={{ mb: 0.5 }} />
@@ -279,14 +262,14 @@ export default function ProjectsPage() {
         <Box
           sx={{
             textAlign: 'center',
-            py: 10,
+            py: { xs: 6, sm: 10 },
             px: 2,
-            border: '2px dashed',
+            border: '1.5px dashed',
             borderColor: 'divider',
             borderRadius: 3,
           }}
         >
-          <FolderOpenIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+          <FolderOpenIcon sx={{ fontSize: { xs: 48, sm: 64 }, color: 'text.disabled', mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No projects yet
           </Typography>
@@ -298,9 +281,9 @@ export default function ProjectsPage() {
           </Button>
         </Box>
       ) : (
-        <Grid container spacing={3}>
+        <Grid container spacing={{ xs: 2, sm: 3 }}>
           {projects.map((project) => (
-            <Grid key={project.id} size={{ xs: 12, sm: 6, md: 4 }}>
+            <Grid key={project.id} size={{ xs: 12, sm: 6, lg: 4 }}>
               <ProjectCard
                 project={project}
                 taskCounts={taskCountsMap[project.id]}
