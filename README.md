@@ -178,3 +178,55 @@ All endpoints return `Content-Type: application/json`. Protected endpoints requi
 ```
 
 ---
+
+## 7. Trade-offs and Reasoning
+
+### JWT in localStorage instead of httpOnly cookies
+
+**Decision:** Access tokens are stored in `localStorage` and sent as `Authorization: Bearer <token>`.
+
+**Trade-off:** `localStorage` is readable by any JavaScript running on the page, making it vulnerable to XSS. `httpOnly` cookies are immune to XSS because the browser never exposes them to JavaScript.
+
+**Why we chose this:** REST APIs consumed by SPAs are the natural fit for Bearer tokens — no CORS preflight complications, no `SameSite` edge cases, and no CSRF token infrastructure needed. The practical XSS risk is low when Content Security Policy is set correctly. A production hardening step would be to move to `httpOnly` cookies with a `SameSite=Strict` policy and add a CSRF token endpoint.
+
+---
+
+### In-memory SSE broker instead of Redis pub/sub
+
+**Decision:** The real-time event fan-out is handled by an in-process Go struct that holds subscriber channels per project.
+
+**Trade-off:** This works correctly for a single server instance. If you scale horizontally to two API containers, clients connected to different pods will not receive each other's events.
+
+**Why we chose this:** Redis adds an operational dependency and several hundred lines of connection/reconnect logic for a feature that works perfectly at single-instance scale. The broker sits behind a narrow interface (`Publish(projectID, event)` / `Subscribe(projectID) chan Event`), so replacing the backing implementation with Redis pub/sub is an isolated change that doesn't touch any handler code.
+
+---
+
+### No refresh token rotation — 24-hour access tokens only
+
+**Decision:** A single JWT is issued at login with a 24-hour expiry. There is no `/auth/refresh` endpoint and no token blacklist.
+
+**Trade-off:** If a token is leaked it remains valid for up to 24 hours. There is no mechanism to revoke a live token without a server-side blacklist (which requires shared state across instances).
+
+**Why we chose this:** Refresh token rotation with blacklisting adds meaningful backend complexity — an additional DB table, a clock-skew grace window, and logout-everywhere logic. For a task management tool where sessions are not long-lived and the attack surface is controlled, 24-hour tokens are a deliberate simplification. The fix is additive: add a `refresh_tokens` table and two endpoints without changing any existing auth code.
+
+---
+
+### Flat task list without pagination
+
+**Decision:** `GET /projects/:id/tasks` returns all tasks for a project in a single response.
+
+**Trade-off:** Response time and memory usage grow linearly with task count. A project with thousands of tasks will be slow.
+
+**Why we chose this:** Tasks are indexed on `project_id`, so the query is fast at any realistic project size. Cursor-based pagination would require frontend changes (infinite scroll or a paginator component) for marginal benefit at this scale. The server-side filter parameters (`?status=` and `?assignee=`) already reduce payload size for the most common access patterns.
+
+---
+
+### Within-column task order is not persisted
+
+**Decision:** Dragging tasks within a Kanban column reorders them visually, but the order is not saved to the database and resets on the next data load.
+
+**Trade-off:** Users cannot create a persistent custom task order.
+
+**Why we chose this:** Persisting arbitrary sort order requires either a floating-point `rank` field (which requires periodic rebalancing to avoid precision exhaustion) or a linked-list approach (which makes reordering a multi-row transaction). Either adds schema complexity, a dedicated reorder endpoint, and conflict resolution logic for concurrent drags from two users. The default sort by priority then due date is meaningful and consistent, which is more useful than an arbitrary manual order that would need to survive concurrent edits.
+
+---
